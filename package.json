@@ -1,0 +1,13 @@
+{
+  "name": "vehicle-info-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for vehicle lookup",
+  "main": "webhook.js",
+  "scripts": {
+    "start": "node webhook.js"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18.x"
+  }
+}
