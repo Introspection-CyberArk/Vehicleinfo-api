@@ -11,21 +11,22 @@ module.exports = async (req, res) => {
     const body = req.body || {};
     const { message, callback_query } = body;
 
-    // Helper function to send a message to Telegram
-    const postToTelegram = async (chatId, text, parse_mode = 'Markdown') => {
-        const botToken = process.env.TELEGRAM_BOT_TOKEN;
-        if (!botToken) {
-            console.error('TELEGRAM_BOT_TOKEN environment variable is not set!');
-            return;
-        }
+    // Helper function to send a message to Telegram (UPDATED)
+    const postToTelegram = (chatId, text) => {
+        return new Promise((resolve, reject) => {
+            const botToken = process.env.TELEGRAM_BOT_TOKEN;
+            if (!botToken) {
+                console.error('TELEGRAM_BOT_TOKEN environment variable is not set!');
+                resolve();
+                return;
+            }
 
-        const payload = JSON.stringify({
-            chat_id: chatId,
-            text: text,
-            parse_mode: parse_mode
-        });
+            const payload = JSON.stringify({
+                chat_id: chatId,
+                text: text,
+                parse_mode: 'HTML'  // Simpler, more forgiving formatting
+            });
 
-        return new Promise((resolve) => {
             const options = {
                 hostname: 'api.telegram.org',
                 port: 443,
@@ -90,9 +91,28 @@ module.exports = async (req, res) => {
             .replace(/>/g, '&gt;');
     };
 
-    // Handle Callback Queries (button clicks)
+    // Handle Callback Queries (button clicks) - if you use inline keyboards
     if (callback_query) {
-        await answerCallback(callback_query.id);
+        // Simple answer to callback
+        const callbackResponse = {
+            callback_query_id: callback_query.id,
+            text: 'Please send a vehicle number directly.'
+        };
+        const cbPayload = JSON.stringify(callbackResponse);
+        const cbOptions = {
+            hostname: 'api.telegram.org',
+            port: 443,
+            path: `/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(cbPayload)
+            }
+        };
+        const cbRequest = https.request(cbOptions, () => {});
+        cbRequest.write(cbPayload);
+        cbRequest.end();
+
         const chatId = callback_query.message.chat.id;
         await postToTelegram(chatId, '🔍 Please send a vehicle registration number (e.g., UP80FZ7850)');
         return res.status(200).send('OK');
@@ -108,32 +128,32 @@ module.exports = async (req, res) => {
 
     // Handle /start command
     if (incomingText === '/start') {
-        const welcomeMessage = `🚗 **Vehicle Information Bot**
+        const welcomeMessage = `🚗 <b>Vehicle Information Bot</b>
 
 Send me an Indian vehicle registration number to get details:
 
-Example: \`UP80FZ7850\`
+Example: <code>UP80FZ7850</code>
 
 ━━━━━━━━━━━━━━━━━━━━━
-🤖 **Powered By @Introspection007**`;
+🤖 <b>Powered By @Introspection007</b>`;
 
         await postToTelegram(chatId, welcomeMessage);
         return res.status(200).send('OK');
     }
 
-    // Validate registration number format
+    // Validate registration number format (e.g., UP80FZ7850)
     const regRegex = /^[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}$/i;
     if (!regRegex.test(incomingText)) {
-        const invalidMessage = `❌ **Invalid Registration Number**
+        const invalidMessage = `❌ <b>Invalid Registration Number</b>
 
 Please send a valid Indian vehicle registration number.
 
-Example: \`UP80FZ7850\`
+Example: <code>UP80FZ7850</code>
 
 Format: Two letters, two digits, 1-2 letters, 4 digits
 
 ━━━━━━━━━━━━━━━━━━━━━
-🤖 **Powered By @Introspection007**`;
+🤖 <b>Powered By @Introspection007</b>`;
 
         await postToTelegram(chatId, invalidMessage);
         return res.status(200).send('OK');
@@ -143,27 +163,27 @@ Format: Two letters, two digits, 1-2 letters, 4 digits
     const data = await fetchVehicleData(incomingText);
 
     if (!data) {
-        const notFoundMessage = `❌ **Vehicle Not Found**
+        const notFoundMessage = `❌ <b>Vehicle Not Found</b>
 
-No details found for: ${incomingText.toUpperCase()}
+No details found for: <code>${incomingText.toUpperCase()}</code>
 
 ━━━━━━━━━━━━━━━━━━━━━
-🤖 **Powered By @Introspection007**`;
+🤖 <b>Powered By @Introspection007</b>`;
 
         await postToTelegram(chatId, notFoundMessage);
         return res.status(200).send('OK');
     }
 
-    // Format the response
-    const successMessage = `🚗 **VEHICLE DETAILS**
+    // Format the response with HTML
+    const successMessage = `🚗 <b>VEHICLE DETAILS</b>
 
-**Registration:**
-Number: ${escapeHtml(data.registration_number)}
+<b>Registration:</b>
+Number: <code>${escapeHtml(data.registration_number)}</code>
 Date: ${escapeHtml(data.registration_date)}
 RTO: ${escapeHtml(data.registered_at)}
 Status: ${escapeHtml(data.rc_status)}
 
-**Vehicle:**
+<b>Vehicle:</b>
 Make: ${escapeHtml(data.make)}
 Model: ${escapeHtml(data.model)}
 Variant: ${escapeHtml(data.variant)}
@@ -171,19 +191,19 @@ Type: ${escapeHtml(data.vehicle_type)}
 Fuel: ${escapeHtml(data.fuel_descritpion)}
 CC: ${escapeHtml(data.cubic_capacity)} cc
 
-**Owner:**
+<b>Owner:</b>
 Name: ${escapeHtml(data.owner_name || 'Not Available')}
 Address: ${escapeHtml(data.permanent_address)}
 Owner Count: ${escapeHtml(data.owner_count)}
 
-**Insurance:**
+<b>Insurance:</b>
 Insurer: ${escapeHtml(data.previous_insurance_carrier)}
 Policy: ${escapeHtml(data.previous_policy_number)}
 Valid Upto: ${escapeHtml(data.previous_policy_valid_upto)}
 RC Valid Upto: ${escapeHtml(data.rc_fit_upto)}
 
 ━━━━━━━━━━━━━━━━━━━━━
-🤖 **Powered By @Introspection007**`;
+🤖 <b>Powered By @Introspection007</b>`;
 
     await postToTelegram(chatId, successMessage);
     return res.status(200).send('OK');
