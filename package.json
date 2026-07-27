@@ -1,6 +1,6 @@
 {
   "name": "vehicleinfo-api-bot",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Vehicle Info API + Telegram Bot",
   "main": "index.js",
   "scripts": {
