@@ -1,7 +1,7 @@
 {
   "name": "vehicle-info-telegram-bot",
-  "version": "1.0.0",
-  "description": "Telegram bot for vehicle information using API",
+  "version": "2.0.0",
+  "description": "Telegram bot for vehicle information using custom API",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -14,7 +14,7 @@
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": ["telegram", "bot", "vehicle", "api"],
+  "keywords": ["telegram", "bot", "vehicle", "api", "vercel"],
   "author": "@Introspection",
   "license": "MIT"
 }
