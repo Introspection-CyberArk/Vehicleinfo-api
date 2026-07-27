@@ -1,7 +1,6 @@
 // ============================================
-// VEHICLE INFO API - FIXED VERSION
+// VEHICLE INFO API - VERCEL OPTIMIZED
 // Powered By: @Introspection
-// Deploy on Vercel
 // ============================================
 
 const express = require('express');
@@ -15,7 +14,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Accept');
     if (req.method === 'OPTIONS') {
         return res.sendStatus(200);
     }
@@ -26,21 +25,20 @@ app.use((req, res, next) => {
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-    // PRIMARY API (Your original)
     PRIMARY_API: 'https://vehicle-and-chassis-infoproxy.profilework239.workers.dev/search',
-    // FALLBACK API (Using mock data if primary fails)
     USE_FALLBACK: true,
     TIMEOUT: 15000
 };
 
 // ============================================
-// MOCK DATA FOR FALLBACK
+// MOCK DATA
 // ============================================
 function getMockData(query) {
-    const isChassis = query.length > 10;
+    const isChassis = query.length > 10 && !/^[A-Z]{2}[0-9]{1,2}[A-Z]{1,2}[0-9]{4,5}$/.test(query);
+    
     return {
         statusCode: 200,
-        message: "Success (Mock Data - Primary API Unavailable)",
+        message: "Success (Demo Data)",
         data: {
             stauts_message: "OK",
             state_cd: "HR",
@@ -149,8 +147,13 @@ function getMockData(query) {
             rc_aitp_no: null,
             rc_aitp_pmt_no: null,
             rc_status: "ACTIVE",
-            reminderText: "Never miss an important dates! Set Reminders for PUCC, Insurance and Permits.",
+            reminderText: "Never miss important dates! Set Reminders for PUCC, Insurance and Permits.",
             fromPaidSearch: false
+        },
+        _meta: {
+            source: 'mock',
+            timestamp: new Date().toISOString(),
+            query: query
         }
     };
 }
@@ -188,50 +191,36 @@ async function fetchFromPrimaryAPI(query) {
 }
 
 // ============================================
-// SEARCH API ENDPOINT
+// SEARCH ENDPOINT - Main API
 // ============================================
 app.get('/search', async (req, res) => {
     try {
         const query = req.query.q || req.query.query || '';
         
         console.log(`[API] Search request: "${query}"`);
-        console.log(`[API] Client IP: ${req.ip || req.connection.remoteAddress}`);
         
         // Validate query
         if (!query || query.length < 3) {
             return res.status(400).json({
                 statusCode: 400,
                 message: 'Bad Request - Query parameter "q" is required (min 3 characters)',
-                data: null
+                data: null,
+                error: 'INVALID_QUERY'
             });
         }
 
-        // Try primary API first
+        // Try primary API
         let result = await fetchFromPrimaryAPI(query);
         
         // If primary fails, use fallback
         if (!result.success && CONFIG.USE_FALLBACK) {
             console.log('[API] Using fallback mock data');
-            
-            // Check if query is chassis or registration
-            const isChassis = query.length > 10 && !/^[A-Z]{2}[0-9]{1,2}[A-Z]{1,2}[0-9]{4,5}$/.test(query);
-            
-            return res.json({
-                statusCode: 200,
-                message: 'Success (Using Mock Data - Primary API Unavailable)',
-                data: getMockData(query).data,
-                _meta: {
-                    query: query,
-                    source: 'fallback',
-                    timestamp: new Date().toISOString(),
-                    note: 'Primary API unavailable, using demo data'
-                }
-            });
+            const mockData = getMockData(query);
+            return res.json(mockData);
         }
         
         // Primary API succeeded
         if (result.success && result.data) {
-            // Check if data is valid
             if (result.data.statusCode === 200 && result.data.data) {
                 return res.json({
                     statusCode: 200,
@@ -244,19 +233,11 @@ app.get('/search', async (req, res) => {
                     }
                 });
             } else {
-                // Primary returned error
+                // Primary returned error, use fallback
                 if (CONFIG.USE_FALLBACK) {
-                    return res.json({
-                        statusCode: 200,
-                        message: 'Success (Using Mock Data)',
-                        data: getMockData(query).data,
-                        _meta: {
-                            query: query,
-                            source: 'fallback',
-                            timestamp: new Date().toISOString(),
-                            note: 'Primary API returned error, using demo data'
-                        }
-                    });
+                    const mockData = getMockData(query);
+                    mockData.message = 'Success (Fallback - Primary API returned error)';
+                    return res.json(mockData);
                 }
                 
                 return res.status(404).json({
@@ -267,19 +248,11 @@ app.get('/search', async (req, res) => {
             }
         }
         
-        // If we're here, something went wrong
+        // Fallback for any other error
         if (CONFIG.USE_FALLBACK) {
-            return res.json({
-                statusCode: 200,
-                message: 'Success (Using Mock Data)',
-                data: getMockData(query).data,
-                _meta: {
-                    query: query,
-                    source: 'fallback',
-                    timestamp: new Date().toISOString(),
-                    note: 'Primary API failed, using demo data'
-                }
-            });
+            const mockData = getMockData(query);
+            mockData.message = 'Success (Fallback - Primary API unavailable)';
+            return res.json(mockData);
         }
         
         return res.status(500).json({
@@ -292,42 +265,25 @@ app.get('/search', async (req, res) => {
     } catch (error) {
         console.error('[API] Fatal error:', error);
         
-        // Last resort fallback
-        if (CONFIG.USE_FALLBACK) {
-            try {
-                const query = req.query.q || req.query.query || 'unknown';
-                return res.json({
-                    statusCode: 200,
-                    message: 'Success (Emergency Fallback)',
-                    data: getMockData(query).data,
-                    _meta: {
-                        query: query,
-                        source: 'emergency',
-                        timestamp: new Date().toISOString(),
-                        note: 'Emergency fallback activated'
-                    }
-                });
-            } catch (fallbackError) {
-                return res.status(500).json({
-                    statusCode: 500,
-                    message: 'Critical Error',
-                    data: null,
-                    error: 'Both API and fallback failed'
-                });
-            }
+        // Emergency fallback
+        try {
+            const query = req.query.q || req.query.query || 'unknown';
+            const mockData = getMockData(query);
+            mockData.message = 'Success (Emergency Fallback)';
+            return res.json(mockData);
+        } catch (fallbackError) {
+            return res.status(500).json({
+                statusCode: 500,
+                message: 'Critical Error',
+                data: null,
+                error: 'Both API and fallback failed'
+            });
         }
-        
-        res.status(500).json({
-            statusCode: 500,
-            message: 'Internal Server Error',
-            data: null,
-            error: error.message
-        });
     }
 });
 
 // ============================================
-// HEALTH CHECK
+// ROOT ENDPOINT - Health Check
 // ============================================
 app.get('/', (req, res) => {
     res.json({
@@ -337,7 +293,12 @@ app.get('/', (req, res) => {
         author: '@Introspection',
         endpoints: {
             search: '/search?q=HR70H9676',
-            health: '/'
+            health: '/health',
+            root: '/'
+        },
+        examples: {
+            registration: '/search?q=HR70H9676',
+            chassis: '/search?q=MBJAA3GS600560639'
         },
         timestamp: new Date().toISOString()
     });
@@ -353,28 +314,31 @@ app.get('/health', (req, res) => {
 });
 
 // ============================================
+// TEST ENDPOINT - For debugging
+// ============================================
+app.get('/test', (req, res) => {
+    res.json({
+        message: 'API is working!',
+        query: req.query,
+        params: req.params,
+        headers: req.headers,
+        timestamp: new Date().toISOString()
+    });
+});
+
+// ============================================
 // 404 Handler
 // ============================================
 app.use((req, res) => {
     res.status(404).json({
         statusCode: 404,
         message: 'Endpoint not found',
-        endpoints: ['/search?q=VEHICLE_NUMBER', '/', '/health']
+        available_endpoints: ['/', '/search?q=VEHICLE_NUMBER', '/health', '/test'],
+        documentation: 'Use /search?q=HR70H9676 to search'
     });
 });
 
 // ============================================
-// START SERVER
+// EXPORT FOR VERCEL
 // ============================================
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log('╔════════════════════════════════════════╗');
-    console.log('║   🚀 VEHICLE INFO API STARTED        ║');
-    console.log('╚════════════════════════════════════════╝');
-    console.log(`📡 Port: ${PORT}`);
-    console.log(`🔗 Search: /search?q=HR70H9676`);
-    console.log(`👤 Author: @Introspection`);
-    console.log('════════════════════════════════════════');
-});
-
 module.exports = app;
