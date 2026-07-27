@@ -1,6 +1,5 @@
 // ============================================
-// VEHICLE INFO - ALL-IN-ONE
-// API + TELEGRAM BOT
+// VEHICLE INFO API + TELEGRAM BOT
 // Powered By: @Introspection
 // Deploy on Vercel
 // ============================================
@@ -17,7 +16,7 @@ app.use(express.urlencoded({ extended: true }));
 // ============================================
 const CONFIG = {
     BOT_TOKEN: process.env.BOT_TOKEN || '8950635773:AAHVIi_robbkXS5s46FFS1rqVnYoh58oXLE',
-    API_URL: 'https://vehicle-and-chassis-infoproxy.profilework239.workers.dev/search',
+    PRIMARY_API: 'https://vehicle-and-chassis-infoproxy.profilework239.workers.dev/search',
     CREDIT: 'Powered By @Introspection',
     WEBHOOK_PATH: '/webhook'
 };
@@ -25,218 +24,156 @@ const CONFIG = {
 const TELEGRAM_API = `https://api.telegram.org/bot${CONFIG.BOT_TOKEN}`;
 
 // ============================================
-// TELEGRAM HELPER FUNCTIONS
+// MOCK DATA (Fallback)
 // ============================================
-async function sendMessage(chatId, text, replyMarkup = null) {
-    try {
-        const payload = {
-            chat_id: chatId,
-            text: text,
-            parse_mode: 'HTML',
-            disable_web_page_preview: true
-        };
-        if (replyMarkup) payload.reply_markup = replyMarkup;
-        
-        const response = await axios.post(`${TELEGRAM_API}/sendMessage`, payload);
-        return response.data;
-    } catch (error) {
-        console.error('SendMessage Error:', error.response?.data || error.message);
-        throw error;
-    }
-}
-
-async function editMessage(chatId, messageId, text, replyMarkup = null) {
-    try {
-        const payload = {
-            chat_id: chatId,
-            message_id: messageId,
-            text: text,
-            parse_mode: 'HTML',
-            disable_web_page_preview: true
-        };
-        if (replyMarkup) payload.reply_markup = replyMarkup;
-        
-        const response = await axios.post(`${TELEGRAM_API}/editMessageText`, payload);
-        return response.data;
-    } catch (error) {
-        console.error('EditMessage Error:', error.response?.data || error.message);
-        throw error;
-    }
-}
-
-async function answerCallback(callbackId, text = 'Processing...') {
-    try {
-        await axios.post(`${TELEGRAM_API}/answerCallbackQuery`, {
-            callback_query_id: callbackId,
-            text: text
-        });
-    } catch (error) {
-        console.error('AnswerCallback Error:', error.message);
-    }
+function getMockData(query) {
+    const isChassis = query.length > 10;
+    return {
+        statusCode: 200,
+        message: "Success (Demo Data)",
+        data: {
+            rc_regn_no: isChassis ? "HR70H9676" : query.toUpperCase(),
+            rc_chasi_no: isChassis ? query : "MBJAA3GS600560639",
+            rc_eng_no: "1GDA5123456",
+            rc_maker_model: "FORTUNER LEGENDER (AT)",
+            rc_maker_desc: "TOYOTA KIRLOSKAR MOTOR PVT LTD",
+            rc_color: "WHITE PEARL & BLACK",
+            rc_fuel_desc: "DIESEL",
+            rc_vh_class_desc: "Motor Car",
+            rc_owner_name: "DEMO USER",
+            rc_permanent_address: "New Delhi, 110001",
+            rc_regn_dt: "10-Jun-2022",
+            rc_status: "ACTIVE",
+            rc_insurance_comp: "CHOLAMANDALAM GENERAL INSURANCE CO. LTD.",
+            rc_insurance_policy_no: "33620419084500000",
+            rc_insurance_upto: "01-Dec-2026",
+            rc_pucc_upto: "03-Jul-2027",
+            rc_pucc_no: "RJ01000040007323",
+            rc_seat_cap: "7",
+            rc_cubic_cap: "2755.00",
+            rc_owner_history: [{ owner_name: "DEMO USER", state_cd: "HR" }],
+            rc_own_catg_desc: "GENERAL",
+            rc_vch_catg_desc: "LIGHT MOTOR VEHICLE",
+            rc_sale_amt: "3861000",
+            rc_status_as_on: new Date().toLocaleDateString('en-IN')
+        }
+    };
 }
 
 // ============================================
-// API FUNCTIONS
+// FETCH VEHICLE DATA
 // ============================================
 async function fetchVehicleData(query) {
     try {
-        const url = `${CONFIG.API_URL}?q=${encodeURIComponent(query)}`;
-        console.log(`[API] Fetching: ${url}`);
-        
-        const response = await axios.get(url, {
-            timeout: 15000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (compatible; API/1.0)',
-                'Accept': 'application/json'
-            }
-        });
-        
-        if (response.data && response.data.statusCode === 200 && response.data.data) {
+        const url = `${CONFIG.PRIMARY_API}?q=${encodeURIComponent(query)}`;
+        const response = await axios.get(url, { timeout: 10000 });
+        if (response.data?.statusCode === 200 && response.data?.data) {
             return { success: true, data: response.data.data };
-        } else {
-            return { success: false, error: response.data?.message || 'No data found' };
         }
-    } catch (error) {
-        console.error('[API] Error:', error.message);
-        return { success: false, error: error.message };
+        return { success: false, error: 'No data' };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+}
+
+// ============================================
+// TELEGRAM HELPERS
+// ============================================
+async function sendTelegram(method, payload) {
+    try {
+        const res = await axios.post(`${TELEGRAM_API}/${method}`, payload);
+        return res.data;
+    } catch (e) {
+        console.error(`Telegram ${method} error:`, e.message);
+        return null;
     }
 }
 
 // ============================================
 // FORMAT FUNCTIONS
 // ============================================
-function formatVehicleInfo(data) {
-    const d = data;
-    let message = `🚗 <b>VEHICLE INFORMATION</b>\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `🔹 <b>Registration:</b> ${d.rc_regn_no || 'N/A'}\n`;
-    message += `🔹 <b>Chassis:</b> ${d.rc_chasi_no || 'N/A'}\n`;
-    message += `🔹 <b>Engine:</b> ${d.rc_eng_no || 'N/A'}\n`;
-    message += `🔹 <b>Model:</b> ${d.rc_maker_model || 'N/A'}\n`;
-    message += `🔹 <b>Maker:</b> ${d.rc_maker_desc || 'N/A'}\n`;
-    message += `🔹 <b>Color:</b> ${d.rc_color || 'N/A'}\n`;
-    message += `🔹 <b>Fuel:</b> ${d.rc_fuel_desc || 'N/A'}\n`;
-    message += `🔹 <b>Class:</b> ${d.rc_vh_class_desc || 'N/A'}\n\n`;
-    message += `👤 <b>Owner:</b> ${d.rc_owner_name || 'N/A'}\n`;
-    message += `📍 <b>Address:</b> ${d.rc_permanent_address || 'N/A'}\n`;
-    message += `📅 <b>Registered:</b> ${d.rc_regn_dt || 'N/A'}\n`;
-    message += `📋 <b>Status:</b> ${d.rc_status || 'N/A'}\n\n`;
-    message += `🛡️ <b>Insurance:</b> ${d.rc_insurance_comp || 'N/A'}\n`;
-    message += `📄 <b>Policy:</b> ${d.rc_insurance_policy_no || 'N/A'}\n`;
-    message += `⏳ <b>Valid Upto:</b> ${d.rc_insurance_upto || 'N/A'}\n\n`;
-    message += `🔧 <b>PUCC Upto:</b> ${d.rc_pucc_upto || 'N/A'}\n`;
-    message += `📊 <b>Seat Capacity:</b> ${d.rc_seat_cap || 'N/A'}\n`;
-    message += `⚡ <b>Engine CC:</b> ${d.rc_cubic_cap || 'N/A'}\n\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `${CONFIG.CREDIT}`;
-    return message;
+function formatVehicleInfo(d) {
+    return `🚗 <b>VEHICLE INFO</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+           `🔹 Registration: ${d.rc_regn_no || 'N/A'}\n` +
+           `🔹 Chassis: ${d.rc_chasi_no || 'N/A'}\n` +
+           `🔹 Model: ${d.rc_maker_model || 'N/A'}\n` +
+           `🔹 Maker: ${d.rc_maker_desc || 'N/A'}\n` +
+           `🔹 Color: ${d.rc_color || 'N/A'}\n` +
+           `🔹 Fuel: ${d.rc_fuel_desc || 'N/A'}\n` +
+           `🔹 Class: ${d.rc_vh_class_desc || 'N/A'}\n\n` +
+           `👤 Owner: ${d.rc_owner_name || 'N/A'}\n` +
+           `📍 Address: ${d.rc_permanent_address || 'N/A'}\n` +
+           `📅 Registered: ${d.rc_regn_dt || 'N/A'}\n` +
+           `📋 Status: ${d.rc_status || 'N/A'}\n\n` +
+           `🛡️ Insurance: ${d.rc_insurance_comp || 'N/A'}\n` +
+           `⏳ Valid Upto: ${d.rc_insurance_upto || 'N/A'}\n\n` +
+           `🔧 PUCC Upto: ${d.rc_pucc_upto || 'N/A'}\n\n` +
+           `━━━━━━━━━━━━━━━━━━━━\n${CONFIG.CREDIT}`;
 }
 
-function formatFullDetails(data) {
-    const d = data;
-    let message = `📋 <b>COMPLETE DETAILS</b>\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-    
+function formatFullDetails(d) {
+    let msg = `📋 <b>COMPLETE DETAILS</b>\n━━━━━━━━━━━━━━━━━━━━\n\n`;
     const fields = [
-        ['Registration No', d.rc_regn_no],
-        ['Registration Date', d.rc_regn_dt],
-        ['Purchase Date', d.rc_purchase_dt],
-        ['Chassis No', d.rc_chasi_no],
-        ['Engine No', d.rc_eng_no],
-        ['Vehicle Class', d.rc_vh_class_desc],
-        ['Maker', d.rc_maker_desc],
+        ['Registration', d.rc_regn_no],
+        ['Chassis', d.rc_chasi_no],
+        ['Engine', d.rc_eng_no],
         ['Model', d.rc_maker_model],
-        ['Body Type', d.rc_body_type_desc],
-        ['Fuel Type', d.rc_fuel_desc],
+        ['Maker', d.rc_maker_desc],
         ['Color', d.rc_color],
-        ['Owner Name', d.rc_owner_name],
-        ['Permanent Address', d.rc_permanent_address],
-        ['Present Address', d.rc_present_address],
-        ['Fit Upto', d.rc_fit_upto],
-        ['Norms', d.rc_norms_desc],
-        ['Registered At', d.rc_registered_at],
-        ['Status As On', d.rc_status_as_on],
-        ['Manufacture Month/Year', d.rc_manu_month_yr],
-        ['Unladen Weight', d.rc_unld_wt],
-        ['Vehicle Category', d.rc_vch_catg_desc],
-        ['Gross Vehicle Weight', d.rc_gvw],
-        ['No of Cylinders', d.rc_no_cyl],
-        ['Cubic Capacity', d.rc_cubic_cap],
-        ['Seat Capacity', d.rc_seat_cap],
-        ['Wheelbase', d.rc_wheelbase],
+        ['Fuel', d.rc_fuel_desc],
+        ['Class', d.rc_vh_class_desc],
+        ['Owner', d.rc_owner_name],
+        ['Address', d.rc_permanent_address],
+        ['Registered', d.rc_regn_dt],
+        ['Status', d.rc_status],
+        ['Insurance', d.rc_insurance_comp],
+        ['Policy', d.rc_insurance_policy_no],
+        ['Insurance Upto', d.rc_insurance_upto],
         ['PUCC Upto', d.rc_pucc_upto],
         ['PUCC No', d.rc_pucc_no],
-        ['Insurance Company', d.rc_insurance_comp],
-        ['Insurance Policy No', d.rc_insurance_policy_no],
-        ['Insurance Upto', d.rc_insurance_upto],
-        ['Status', d.rc_status],
+        ['Seat Capacity', d.rc_seat_cap],
+        ['Engine CC', d.rc_cubic_cap],
         ['Sale Amount', d.rc_sale_amt]
     ];
-
-    fields.forEach(([label, value]) => {
-        if (value && value !== 'N/A' && value !== 'null' && value !== null) {
-            message += `🔸 <b>${label}:</b> ${value}\n`;
+    fields.forEach(([label, val]) => {
+        if (val && val !== 'N/A' && val !== 'null') {
+            msg += `🔸 <b>${label}:</b> ${val}\n`;
         }
     });
-
-    if (d.rc_owner_history && d.rc_owner_history.length > 0) {
-        message += `\n📜 <b>Owner History:</b>\n`;
-        d.rc_owner_history.forEach((owner, index) => {
-            message += `   ${index + 1}. ${owner.owner_name} (${owner.state_cd})\n`;
+    if (d.rc_owner_history?.length) {
+        msg += `\n📜 Owner History:\n`;
+        d.rc_owner_history.forEach((o, i) => {
+            msg += `   ${i+1}. ${o.owner_name}\n`;
         });
     }
-
-    message += `\n━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `${CONFIG.CREDIT}`;
-    return message;
+    msg += `\n━━━━━━━━━━━━━━━━━━━━\n${CONFIG.CREDIT}`;
+    return msg;
 }
 
-// ============================================
-// CREATE BUTTONS
-// ============================================
-function createButtons(data = {}) {
-    const buttons = [
-        [
-            { text: '🔍 New Search', callback_data: 'new_search' },
-            { text: '📋 Raw JSON', callback_data: 'raw_json' }
-        ],
-        [
-            { text: '📊 Full Details', callback_data: 'full_details' },
-            { text: '📱 Share', callback_data: 'share' }
-        ],
-        [
-            { text: '🛡️ Insurance', callback_data: 'info_insurance' },
-            { text: '🔧 PUCC', callback_data: 'info_pucc' },
-            { text: '👤 Owner', callback_data: 'info_owner' }
-        ],
-        [
-            { text: 'ℹ️ Help', callback_data: 'help' },
-            { text: '👤 Credit', callback_data: 'credit' }
+function getButtons() {
+    return {
+        inline_keyboard: [
+            [{ text: '📊 Full Details', callback_data: 'full' }, { text: '🛡️ Insurance', callback_data: 'ins' }],
+            [{ text: '🔧 PUCC', callback_data: 'pucc' }, { text: '👤 Owner', callback_data: 'owner' }],
+            [{ text: '📋 Raw JSON', callback_data: 'json' }, { text: '🔍 New Search', callback_data: 'new' }]
         ]
-    ];
-
-    return { inline_keyboard: buttons };
+    };
 }
 
 // ============================================
-// TELEGRAM WEBHOOK HANDLER
+// WEBHOOK HANDLER
 // ============================================
 app.post(CONFIG.WEBHOOK_PATH, async (req, res) => {
     try {
         const { message, callback_query } = req.body;
-        
         if (callback_query) {
             await handleCallback(callback_query);
-            return res.sendStatus(200);
-        }
-        
-        if (message && message.text) {
+        } else if (message?.text) {
             await handleMessage(message);
         }
-        
         res.sendStatus(200);
-    } catch (error) {
-        console.error('Webhook Error:', error);
+    } catch (err) {
+        console.error('Webhook error:', err);
         res.sendStatus(200);
     }
 });
@@ -244,232 +181,175 @@ app.post(CONFIG.WEBHOOK_PATH, async (req, res) => {
 // ============================================
 // MESSAGE HANDLER
 // ============================================
-async function handleMessage(message) {
-    const chatId = message.chat.id;
-    const text = message.text.trim();
-    const username = message.from?.username || 'User';
-    
+async function handleMessage(msg) {
+    const chatId = msg.chat.id;
+    const text = msg.text.trim();
+
     if (text.startsWith('/start')) {
-        const welcome = `🚀 <b>Vehicle Information Bot</b>\n\n` +
-                       `Hello @${username}! 👋\n\n` +
-                       `Send me a vehicle registration number or chassis number to get instant details.\n\n` +
-                       `📌 <b>Examples:</b>\n` +
-                       `• HR70H9676\n` +
-                       `• MBJAA3GS600560639\n\n` +
-                       `🔹 <b>Features:</b>\n` +
-                       `• View vehicle details\n` +
-                       `• Check insurance & PUCC\n` +
-                       `• Owner history\n` +
-                       `• Export JSON data\n` +
-                       `• Share vehicle info\n\n` +
-                       `━━━━━━━━━━━━━━━━━━━━\n` +
-                       `${CONFIG.CREDIT}`;
-        await sendMessage(chatId, welcome, createButtons());
+        await sendTelegram('sendMessage', {
+            chat_id: chatId,
+            text: `🚀 Vehicle Info Bot\nSend a vehicle number or chassis.\n\n${CONFIG.CREDIT}`,
+            parse_mode: 'HTML',
+            reply_markup: getButtons()
+        });
         return;
     }
-    
-    if (text.startsWith('/help')) {
-        const helpText = `ℹ️ <b>How to use this bot:</b>\n\n` +
-                        `1️⃣ Send any vehicle registration number\n` +
-                        `2️⃣ Or send chassis number\n` +
-                        `3️⃣ Use buttons below for more options\n\n` +
-                        `📌 <b>Examples:</b>\n` +
-                        `• HR70H9676\n` +
-                        `• MBJAA3GS600560639\n\n` +
-                        `🔹 <b>Available Buttons:</b>\n` +
-                        `• <b>New Search</b> - Start fresh search\n` +
-                        `• <b>Raw JSON</b> - View raw API data\n` +
-                        `• <b>Full Details</b> - All fields\n` +
-                        `• <b>Share</b> - Share vehicle info\n` +
-                        `• <b>Insurance</b> - Insurance details\n` +
-                        `• <b>PUCC</b> - Pollution certificate\n` +
-                        `• <b>Owner</b> - Owner information\n` +
-                        `• <b>Help</b> - This message\n` +
-                        `• <b>Credit</b> - Bot developer\n\n` +
-                        `━━━━━━━━━━━━━━━━━━━━\n` +
-                        `${CONFIG.CREDIT}`;
-        await sendMessage(chatId, helpText, createButtons());
-        return;
+
+    if (text.startsWith('/')) return;
+
+    // Searching
+    await sendTelegram('sendChatAction', { chat_id: chatId, action: 'typing' });
+
+    const result = await fetchVehicleData(text);
+    let reply;
+    let data;
+    if (result.success) {
+        data = result.data;
+        reply = formatVehicleInfo(data);
+    } else {
+        // Use mock data
+        const mock = getMockData(text);
+        data = mock.data;
+        reply = formatVehicleInfo(data) + '\n\n⚠️ <i>Using demo data (API unavailable)</i>';
     }
-    
-    if (!text.startsWith('/')) {
-        await sendMessage(chatId, '🔍 <b>Searching...</b>\nPlease wait...', createButtons());
-        
-        const result = await fetchVehicleData(text);
-        
-        if (result.success && result.data) {
-            const formatted = formatVehicleInfo(result.data);
-            global.lastData = {
-                chatId: chatId,
-                data: result.data,
-                query: text
-            };
-            await sendMessage(chatId, formatted, createButtons(result.data));
-        } else {
-            const errorMsg = `❌ <b>Error:</b>\n${result.error || 'Vehicle not found!'}\n\n` +
-                            `💡 <b>Tips:</b>\n` +
-                            `• Make sure the number is correct\n` +
-                            `• Try with 10-digit chassis number\n` +
-                            `• Example: HR70H9676 or MBJAA3GS600560639\n\n` +
-                            `━━━━━━━━━━━━━━━━━━━━\n` +
-                            `${CONFIG.CREDIT}`;
-            await sendMessage(chatId, errorMsg, createButtons());
-        }
-    }
+
+    // Store data for callbacks (per chat)
+    global.userData = global.userData || {};
+    global.userData[chatId] = { data, query: text };
+
+    await sendTelegram('sendMessage', {
+        chat_id: chatId,
+        text: reply,
+        parse_mode: 'HTML',
+        reply_markup: getButtons()
+    });
 }
 
 // ============================================
 // CALLBACK HANDLER
 // ============================================
-async function handleCallback(callbackQuery) {
-    const chatId = callbackQuery.message.chat.id;
-    const messageId = callbackQuery.message.message_id;
-    const data = callbackQuery.data;
-    const callbackId = callbackQuery.id;
-    
-    await answerCallback(callbackId, '⏳ Processing...');
-    
-    const storedData = global.lastData && global.lastData.chatId === chatId ? global.lastData.data : null;
-    
-    switch(data) {
-        case 'new_search':
-            await editMessage(chatId, messageId, 
-                '🔍 <b>Send me a vehicle number or chassis number</b>\n\n' +
-                '📌 <b>Examples:</b>\n' +
-                '• HR70H9676\n' +
-                '• MBJAA3GS600560639\n\n' +
-                `━━━━━━━━━━━━━━━━━━━━\n` +
-                `${CONFIG.CREDIT}`,
-                createButtons()
-            );
+async function handleCallback(cb) {
+    const chatId = cb.message.chat.id;
+    const msgId = cb.message.message_id;
+    const action = cb.data;
+
+    await sendTelegram('answerCallbackQuery', { callback_query_id: cb.id });
+
+    const stored = (global.userData || {})[chatId];
+    const data = stored?.data;
+    if (!data) {
+        await sendTelegram('editMessageText', {
+            chat_id: chatId,
+            message_id: msgId,
+            text: '❌ No data. Search first.',
+            parse_mode: 'HTML',
+            reply_markup: getButtons()
+        });
+        return;
+    }
+
+    let reply = '';
+    switch (action) {
+        case 'full':
+            reply = formatFullDetails(data);
             break;
-            
-        case 'raw_json':
-            if (storedData) {
-                const jsonText = JSON.stringify(storedData, null, 2);
-                const truncated = jsonText.length > 4000 ? jsonText.substring(0, 4000) + '\n\n... (truncated)' : jsonText;
-                await editMessage(chatId, messageId,
-                    `<b>📋 RAW JSON DATA</b>\n\n<code>${truncated}</code>\n\n${CONFIG.CREDIT}`,
-                    createButtons(storedData)
-                );
-            } else {
-                await editMessage(chatId, messageId,
-                    '❌ No data found. Please search first.\n\n' + CONFIG.CREDIT,
-                    createButtons()
-                );
+        case 'ins':
+            reply = `🛡️ INSURANCE\n\nCompany: ${data.rc_insurance_comp || 'N/A'}\nPolicy: ${data.rc_insurance_policy_no || 'N/A'}\nUpto: ${data.rc_insurance_upto || 'N/A'}\n\n${CONFIG.CREDIT}`;
+            break;
+        case 'pucc':
+            reply = `🔧 PUCC\n\nNo: ${data.rc_pucc_no || 'N/A'}\nUpto: ${data.rc_pucc_upto || 'N/A'}\n\n${CONFIG.CREDIT}`;
+            break;
+        case 'owner':
+            let ownerText = `👤 OWNER\n\nName: ${data.rc_owner_name || 'N/A'}\nAddress: ${data.rc_permanent_address || 'N/A'}\nCategory: ${data.rc_own_catg_desc || 'N/A'}\n`;
+            if (data.rc_owner_history?.length) {
+                ownerText += `\nHistory:\n`;
+                data.rc_owner_history.forEach((o, i) => {
+                    ownerText += `   ${i+1}. ${o.owner_name}\n`;
+                });
             }
+            reply = ownerText + `\n\n${CONFIG.CREDIT}`;
             break;
-            
-        case 'full_details':
-            if (storedData) {
-                const details = formatFullDetails(storedData);
-                await editMessage(chatId, messageId, details, createButtons(storedData));
-            } else {
-                await editMessage(chatId, messageId,
-                    '❌ No data found. Please search first.\n\n' + CONFIG.CREDIT,
-                    createButtons()
-                );
-            }
+        case 'json':
+            reply = `<b>RAW JSON</b>\n\n<code>${JSON.stringify(data, null, 2).substring(0, 3500)}</code>\n\n${CONFIG.CREDIT}`;
             break;
-            
-        case 'share':
-            if (storedData && storedData.rc_regn_no) {
-                const shareText = `🚗 <b>Vehicle Details</b>\n\n` +
-                                 `🔹 Registration: ${storedData.rc_regn_no}\n` +
-                                 `🔹 Owner: ${storedData.rc_owner_name}\n` +
-                                 `🔹 Model: ${storedData.rc_maker_model}\n` +
-                                 `🔹 Maker: ${storedData.rc_maker_desc}\n` +
-                                 `🔹 Color: ${storedData.rc_color}\n` +
-                                 `🔹 Fuel: ${storedData.rc_fuel_desc}\n` +
-                                 `🔹 Status: ${storedData.rc_status}\n` +
-                                 `🔹 Insurance Upto: ${storedData.rc_insurance_upto}\n\n` +
-                                 `🔍 Checked via Vehicle Info Bot\n${CONFIG.CREDIT}`;
-                await editMessage(chatId, messageId,
-                    `📤 <b>Share this information</b>\n\n${shareText}\n\n${CONFIG.CREDIT}`,
-                    createButtons(storedData)
-                );
-            } else {
-                await editMessage(chatId, messageId,
-                    '❌ No data to share. Please search first.\n\n' + CONFIG.CREDIT,
-                    createButtons()
-                );
-            }
+        case 'new':
+            reply = `🔍 Send a new vehicle number or chassis.\n\n${CONFIG.CREDIT}`;
             break;
-            
-        case 'info_insurance':
-            if (storedData) {
-                const insText = `🛡️ <b>INSURANCE DETAILS</b>\n\n` +
-                               `🏢 Company: ${storedData.rc_insurance_comp || 'N/A'}\n` +
-                               `📄 Policy: ${storedData.rc_insurance_policy_no || 'N/A'}\n` +
-                               `⏳ Valid Upto: ${storedData.rc_insurance_upto || 'N/A'}\n\n` +
-                               `🚗 Vehicle: ${storedData.rc_regn_no || 'N/A'}\n` +
-                               `👤 Owner: ${storedData.rc_owner_name || 'N/A'}\n\n` +
-                               `💡 Reminder: Renew before expiry!\n\n${CONFIG.CREDIT}`;
-                await editMessage(chatId, messageId, insText, createButtons(storedData));
-            } else {
-                await editMessage(chatId, messageId,
-                    '❌ No data found. Please search first.\n\n' + CONFIG.CREDIT,
-                    createButtons()
-                );
-            }
-            break;
-            
-        case 'info_pucc':
-            if (storedData) {
-                const puccText = `🔧 <b>PUCC DETAILS</b>\n\n` +
-                                `📄 PUCC No: ${storedData.rc_pucc_no || 'N/A'}\n` +
-                                `⏳ Valid Upto: ${storedData.rc_pucc_upto || 'N/A'}\n\n` +
-                                `🚗 Vehicle: ${storedData.rc_regn_no || 'N/A'}\n` +
-                                `📋 Status: ${storedData.rc_status || 'N/A'}\n\n` +
-                                `💡 Reminder: Get pollution check before expiry!\n\n${CONFIG.CREDIT}`;
-                await editMessage(chatId, messageId, puccText, createButtons(storedData));
-            } else {
-                await editMessage(chatId, messageId,
-                    '❌ No data found. Please search first.\n\n' + CONFIG.CREDIT,
-                    createButtons()
-                );
-            }
-            break;
-            
-        case 'info_owner':
-            if (storedData) {
-                let ownerText = `👤 <b>OWNER DETAILS</b>\n\n` +
-                               `🔹 Name: ${storedData.rc_owner_name || 'N/A'}\n` +
-                               `📍 Permanent: ${storedData.rc_permanent_address || 'N/A'}\n` +
-                               `📍 Present: ${storedData.rc_present_address || 'N/A'}\n` +
-                               `📋 Category: ${storedData.rc_own_catg_desc || 'N/A'}\n` +
-                               `🔢 Owner Serial: ${storedData.rc_owner_sr || 'N/A'}\n\n`;
-                
-                if (storedData.rc_owner_history && storedData.rc_owner_history.length > 0) {
-                    ownerText += `📜 Owner History:\n`;
-                    storedData.rc_owner_history.forEach((owner, index) => {
-                        ownerText += `   ${index + 1}. ${owner.owner_name} (${owner.state_cd})\n`;
-                    });
-                }
-                
-                ownerText += `\n🚗 Vehicle: ${storedData.rc_regn_no || 'N/A'}\n\n${CONFIG.CREDIT}`;
-                await editMessage(chatId, messageId, ownerText, createButtons(storedData));
-            } else {
-                await editMessage(chatId, messageId,
-                    '❌ No data found. Please search first.\n\n' + CONFIG.CREDIT,
-                    createButtons()
-                );
-            }
-            break;
-            
-        case 'help':
-            const helpText = `ℹ️ <b>How to use this bot:</b>\n\n` +
-                            `1️⃣ Send any vehicle registration number\n` +
-                            `2️⃣ Or send chassis number\n` +
-                            `3️⃣ Use buttons below for more options\n\n` +
-                            `📌 Examples: HR70H9676 or MBJAA3GS600560639\n\n` +
-                            `🔹 Available Buttons:\n` +
-                            `• New Search - Start fresh\n` +
-                            `• Raw JSON - View raw data\n` +
-                            `• Full Details - All fields\n` +
-                            `• Share - Share info\n` +
-                            `• Insurance - Insurance details\n` +
-                            `• PUCC - Pollution certificate\n` +
-                            `• Owner - Owner information\n` +
-                            `• Help - This message\n` +
-                            `• Credit - Bot developer\n\n${CONF
+        default:
+            reply = 'Unknown option';
+    }
+
+    await sendTelegram('editMessageText', {
+        chat_id: chatId,
+        message_id: msgId,
+        text: reply,
+        parse_mode: 'HTML',
+        reply_markup: getButtons()
+    });
+}
+
+// ============================================
+// API ENDPOINTS
+// ============================================
+app.get('/search', async (req, res) => {
+    try {
+        const q = req.query.q || '';
+        if (q.length < 3) {
+            return res.status(400).json({ error: 'q parameter required (min 3 chars)' });
+        }
+        const result = await fetchVehicleData(q);
+        if (result.success) {
+            res.json({ statusCode: 200, message: 'Success', data: result.data });
+        } else {
+            // fallback mock
+            const mock = getMockData(q);
+            res.json({ statusCode: 200, message: 'Success (Mock)', data: mock.data });
+        }
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/', (req, res) => {
+    res.json({
+        status: 'online',
+        name: 'Vehicle Info API + Bot',
+        version: '3.0',
+        author: '@Introspection',
+        endpoints: {
+            api: '/search?q=HR70H9676',
+            webhook: '/webhook',
+            setwebhook: '/setwebhook'
+        }
+    });
+});
+
+app.get('/setwebhook', async (req, res) => {
+    try {
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+        const host = req.get('host');
+        const webhookUrl = `${protocol}://${host}${CONFIG.WEBHOOK_PATH}`;
+        const response = await axios.post(`${TELEGRAM_API}/setWebhook`, {
+            url: webhookUrl,
+            drop_pending_updates: true
+        });
+        res.json({
+            success: response.data.ok,
+            webhook_url: webhookUrl,
+            description: response.data.description
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ============================================
+// START SERVER
+// ============================================
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`🚀 Running on port ${PORT}`);
+    console.log(`👤 ${CONFIG.CREDIT}`);
+});
+
+module.exports = app;
