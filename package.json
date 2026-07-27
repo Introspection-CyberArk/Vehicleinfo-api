@@ -1,13 +1,20 @@
 {
-  "name": "vehicle-info-bot",
+  "name": "vehicle-info-telegram-bot",
   "version": "1.0.0",
-  "description": "Telegram bot for vehicle lookup",
-  "main": "webhook.js",
+  "description": "Telegram bot for vehicle information using API",
+  "main": "index.js",
   "scripts": {
-    "start": "node webhook.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
-  "dependencies": {},
-  "engines": {
-    "node": ">=18.x"
-  }
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": ["telegram", "bot", "vehicle", "api"],
+  "author": "@Introspection",
+  "license": "MIT"
 }
