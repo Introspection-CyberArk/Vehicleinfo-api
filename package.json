@@ -1,7 +1,7 @@
 {
-  "name": "vehicleinfo-api",
+  "name": "vehicleinfo-api-bot",
   "version": "2.0.0",
-  "description": "Vehicle Information API with fallback support",
+  "description": "Vehicle Info API + Telegram Bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -10,7 +10,6 @@
     "express": "^4.18.2",
     "axios": "^1.6.0"
   },
-  "keywords": ["api", "vehicle", "information"],
   "author": "@Introspection",
   "license": "MIT"
 }
