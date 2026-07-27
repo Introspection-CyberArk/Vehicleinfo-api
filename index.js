@@ -2,6 +2,7 @@
 // VEHICLE INFO TELEGRAM BOT
 // Powered By: @Introspection
 // Deploy on Vercel
+// API: https://vehicleinfo-api.vercel.app
 // ============================================
 
 const express = require('express');
@@ -13,7 +14,7 @@ app.use(express.json());
 // CONFIGURATION - EASY TO UPDATE
 // ============================================
 const CONFIG = {
-    API_URL: 'https://vehicle-and-chassis-infoproxy.profilework239.workers.dev/search',
+    API_URL: process.env.API_URL || 'https://vehicleinfo-api.vercel.app/search',
     BOT_TOKEN: process.env.BOT_TOKEN || '8950635773:AAHVIi_robbkXS5s46FFS1rqVnYoh58oXLE',
     CREDIT: 'Powered By @Introspection',
     WEBHOOK_PATH: '/webhook'
@@ -80,12 +81,17 @@ async function answerCallback(callbackId, text = 'Processing...') {
 function createButtons(data = {}) {
     const buttons = [
         [
-            { text: '🔍 Search New Vehicle', callback_data: 'new_search' },
+            { text: '🔍 New Search', callback_data: 'new_search' },
             { text: '📋 Raw JSON', callback_data: 'raw_json' }
         ],
         [
             { text: '📊 Full Details', callback_data: 'full_details' },
             { text: '📱 Share', callback_data: 'share' }
+        ],
+        [
+            { text: '🛡️ Insurance', callback_data: 'info_insurance' },
+            { text: '🔧 PUCC', callback_data: 'info_pucc' },
+            { text: '👤 Owner', callback_data: 'info_owner' }
         ],
         [
             { text: 'ℹ️ Help', callback_data: 'help' },
@@ -190,7 +196,7 @@ function formatFullDetails(data) {
     ];
 
     fields.forEach(([label, value]) => {
-        if (value && value !== 'N/A' && value !== 'null') {
+        if (value && value !== 'N/A' && value !== 'null' && value !== null) {
             message += `🔸 <b>${label}:</b> ${value}\n`;
         }
     });
@@ -210,20 +216,27 @@ function formatFullDetails(data) {
 }
 
 // ============================================
-// FETCH VEHICLE DATA FROM API
+// FETCH VEHICLE DATA FROM YOUR API
 // ============================================
 async function fetchVehicleData(query) {
     try {
+        // Your API expects query parameter: ?q=vehicle_number_or_chassis
         const url = `${CONFIG.API_URL}?q=${encodeURIComponent(query)}`;
-        console.log('Fetching:', url);
+        console.log('🌐 Fetching from:', url);
         
         const response = await axios.get(url, {
             timeout: 30000,
             headers: {
-                'User-Agent': 'Mozilla/5.0 (compatible; TelegramBot/1.0)'
+                'User-Agent': 'Mozilla/5.0 (compatible; TelegramBot/1.0)',
+                'Accept': 'application/json'
             }
         });
         
+        console.log('📥 API Response Status:', response.status);
+        console.log('📦 Response data keys:', Object.keys(response.data || {}));
+        
+        // Handle your API response structure
+        // Your API returns: { statusCode: 200, message: "Success", data: {...} }
         if (response.data && response.data.statusCode === 200 && response.data.data) {
             return {
                 success: true,
@@ -232,17 +245,18 @@ async function fetchVehicleData(query) {
         } else {
             return {
                 success: false,
-                error: 'No data found or invalid response'
+                error: response.data?.message || 'No data found or invalid response'
             };
         }
     } catch (error) {
-        console.error('API Error:', error.message);
+        console.error('❌ API Error:', error.message);
         if (error.response) {
-            console.error('Response:', error.response.data);
+            console.error('Response status:', error.response.status);
+            console.error('Response data:', error.response.data);
         }
         return {
             success: false,
-            error: error.message || 'API request failed'
+            error: error.response?.data?.message || error.message || 'API request failed'
         };
     }
 }
@@ -278,17 +292,50 @@ app.post(CONFIG.WEBHOOK_PATH, async (req, res) => {
 async function handleMessage(message) {
     const chatId = message.chat.id;
     const text = message.text.trim();
+    const username = message.from?.username || 'User';
     
-    // Skip commands - we only handle text input as search queries
-    // But we'll also handle /start for welcome
+    // Handle /start command
     if (text.startsWith('/start')) {
         const welcome = `🚀 <b>Vehicle Information Bot</b>\n\n` +
-                       `Send me a vehicle number or chassis number to get details.\n\n` +
+                       `Hello @${username}! 👋\n\n` +
+                       `Send me a vehicle registration number or chassis number to get instant details.\n\n` +
                        `📌 <b>Examples:</b>\n` +
                        `• HR70H9676\n` +
                        `• MBJAA3GS600560639\n\n` +
+                       `🔹 <b>Features:</b>\n` +
+                       `• View vehicle details\n` +
+                       `• Check insurance & PUCC\n` +
+                       `• Owner history\n` +
+                       `• Export JSON data\n` +
+                       `• Share vehicle info\n\n` +
+                       `━━━━━━━━━━━━━━━━━━━━\n` +
                        `${CONFIG.CREDIT}`;
         await sendMessage(chatId, welcome, createButtons());
+        return;
+    }
+    
+    // Handle /help command
+    if (text.startsWith('/help')) {
+        const helpText = `ℹ️ <b>How to use this bot:</b>\n\n` +
+                        `1️⃣ Send any vehicle registration number\n` +
+                        `2️⃣ Or send chassis number\n` +
+                        `3️⃣ Use buttons below for more options\n\n` +
+                        `📌 <b>Examples:</b>\n` +
+                        `• HR70H9676\n` +
+                        `• MBJAA3GS600560639\n\n` +
+                        `🔹 <b>Available Buttons:</b>\n` +
+                        `• <b>New Search</b> - Start fresh search\n` +
+                        `• <b>Raw JSON</b> - View raw API data\n` +
+                        `• <b>Full Details</b> - All fields\n` +
+                        `• <b>Share</b> - Share vehicle info\n` +
+                        `• <b>Insurance</b> - Insurance details\n` +
+                        `• <b>PUCC</b> - Pollution certificate\n` +
+                        `• <b>Owner</b> - Owner information\n` +
+                        `• <b>Help</b> - This message\n` +
+                        `• <b>Credit</b> - Bot developer\n\n` +
+                        `━━━━━━━━━━━━━━━━━━━━\n` +
+                        `${CONFIG.CREDIT}`;
+        await sendMessage(chatId, helpText, createButtons());
         return;
     }
     
@@ -300,17 +347,22 @@ async function handleMessage(message) {
         
         if (result.success && result.data) {
             const formatted = formatVehicleInfo(result.data);
-            // Store data temporarily for callback queries (in production use Redis or DB)
-            // For now, we'll store in a global cache (will reset on each request, not ideal)
-            // Better approach: use message_id mapping
+            // Store data globally for callback queries
+            // Note: In production, use Redis or a proper cache
             global.lastData = {
                 chatId: chatId,
-                data: result.data
+                data: result.data,
+                query: text
             };
             await sendMessage(chatId, formatted, createButtons(result.data));
         } else {
             const errorMsg = `❌ <b>Error:</b>\n${result.error || 'Vehicle not found! Please check the number.'}\n\n` +
-                            `Please try again with a valid vehicle or chassis number.`;
+                            `💡 <b>Tips:</b>\n` +
+                            `• Make sure the number is correct\n` +
+                            `• Try with 10-digit chassis number\n` +
+                            `• Example: HR70H9676 or MBJAA3GS600560639\n\n` +
+                            `━━━━━━━━━━━━━━━━━━━━\n` +
+                            `${CONFIG.CREDIT}`;
             await sendMessage(chatId, errorMsg, createButtons());
         }
     }
@@ -327,14 +379,19 @@ async function handleCallback(callbackQuery) {
     
     await answerCallback(callbackId, '⏳ Processing...');
     
-    // Get stored data (in production use proper caching)
+    // Get stored data (in production use Redis or proper caching)
     const storedData = global.lastData && global.lastData.chatId === chatId ? global.lastData.data : null;
+    const query = global.lastData && global.lastData.chatId === chatId ? global.lastData.query : '';
     
     switch(data) {
         case 'new_search':
             await editMessage(chatId, messageId, 
                 '🔍 <b>Send me a vehicle number or chassis number</b>\n\n' +
-                '📌 <b>Examples:</b>\n• HR70H9676\n• MBJAA3GS600560639\n\n' +
+                '📌 <b>Examples:</b>\n' +
+                '• HR70H9676\n' +
+                '• MBJAA3GS600560639\n\n' +
+                '💡 You can also use /help for more info\n\n' +
+                `━━━━━━━━━━━━━━━━━━━━\n` +
                 `${CONFIG.CREDIT}`,
                 createButtons()
             );
@@ -345,12 +402,17 @@ async function handleCallback(callbackQuery) {
                 const jsonText = JSON.stringify(storedData, null, 2);
                 const truncated = jsonText.length > 4000 ? jsonText.substring(0, 4000) + '\n\n... (truncated)' : jsonText;
                 await editMessage(chatId, messageId,
-                    `<b>📋 RAW JSON DATA</b>\n\n<code>${truncated}</code>\n\n${CONFIG.CREDIT}`,
+                    `<b>📋 RAW JSON DATA</b>\n\n` +
+                    `<code>${truncated}</code>\n\n` +
+                    `━━━━━━━━━━━━━━━━━━━━\n` +
+                    `${CONFIG.CREDIT}`,
                     createButtons(storedData)
                 );
             } else {
                 await editMessage(chatId, messageId,
-                    '❌ No data found. Please search for a vehicle first.',
+                    '❌ No data found. Please search for a vehicle first.\n\n' +
+                    `━━━━━━━━━━━━━━━━━━━━\n` +
+                    `${CONFIG.CREDIT}`,
                     createButtons()
                 );
             }
@@ -362,7 +424,9 @@ async function handleCallback(callbackQuery) {
                 await editMessage(chatId, messageId, details, createButtons(storedData));
             } else {
                 await editMessage(chatId, messageId,
-                    '❌ No data found. Please search for a vehicle first.',
+                    '❌ No data found. Please search for a vehicle first.\n\n' +
+                    `━━━━━━━━━━━━━━━━━━━━\n` +
+                    `${CONFIG.CREDIT}`,
                     createButtons()
                 );
             }
@@ -370,20 +434,30 @@ async function handleCallback(callbackQuery) {
             
         case 'share':
             if (storedData && storedData.rc_regn_no) {
-                const shareText = `🚗 Vehicle: ${storedData.rc_regn_no}\n` +
-                                 `👤 Owner: ${storedData.rc_owner_name}\n` +
-                                 `🏭 Model: ${storedData.rc_maker_model}\n` +
-                                 `📅 Status: ${storedData.rc_status}\n\n` +
-                                 `🔍 Checked via @IntrospectionBot`;
+                const shareText = `🚗 <b>Vehicle Details</b>\n\n` +
+                                 `🔹 <b>Registration:</b> ${storedData.rc_regn_no}\n` +
+                                 `🔹 <b>Owner:</b> ${storedData.rc_owner_name}\n` +
+                                 `🔹 <b>Model:</b> ${storedData.rc_maker_model}\n` +
+                                 `🔹 <b>Maker:</b> ${storedData.rc_maker_desc}\n` +
+                                 `🔹 <b>Color:</b> ${storedData.rc_color}\n` +
+                                 `🔹 <b>Fuel:</b> ${storedData.rc_fuel_desc}\n` +
+                                 `🔹 <b>Status:</b> ${storedData.rc_status}\n` +
+                                 `🔹 <b>Insurance Upto:</b> ${storedData.rc_insurance_upto}\n\n` +
+                                 `🔍 <i>Checked via Vehicle Info Bot</i>\n` +
+                                 `${CONFIG.CREDIT}`;
                 await editMessage(chatId, messageId,
                     `📤 <b>Share this information</b>\n\n` +
-                    `<code>${shareText}</code>\n\n` +
-                    `Copy and share this with others!\n\n${CONFIG.CREDIT}`,
+                    `${shareText}\n\n` +
+                    `📋 <b>Copy and share with others!</b>\n\n` +
+                    `━━━━━━━━━━━━━━━━━━━━\n` +
+                    `${CONFIG.CREDIT}`,
                     createButtons(storedData)
                 );
             } else {
                 await editMessage(chatId, messageId,
-                    '❌ No data to share. Please search for a vehicle first.',
+                    '❌ No data to share. Please search for a vehicle first.\n\n' +
+                    `━━━━━━━━━━━━━━━━━━━━\n` +
+                    `${CONFIG.CREDIT}`,
                     createButtons()
                 );
             }
@@ -397,12 +471,17 @@ async function handleCallback(callbackQuery) {
                             `📌 <b>Examples:</b>\n` +
                             `• HR70H9676\n` +
                             `• MBJAA3GS600560639\n\n` +
-                            `🔹 <b>Features:</b>\n` +
-                            `• View vehicle details\n` +
-                            `• Check insurance info\n` +
-                            `• Get PUCC details\n` +
-                            `• View full JSON data\n` +
-                            `• Share vehicle info\n\n` +
+                            `🔹 <b>Available Buttons:</b>\n` +
+                            `• <b>New Search</b> - Start fresh search\n` +
+                            `• <b>Raw JSON</b> - View raw API data\n` +
+                            `• <b>Full Details</b> - All fields\n` +
+                            `• <b>Share</b> - Share vehicle info\n` +
+                            `• <b>Insurance</b> - Insurance details\n` +
+                            `• <b>PUCC</b> - Pollution certificate\n` +
+                            `• <b>Owner</b> - Owner information\n` +
+                            `• <b>Help</b> - This message\n` +
+                            `• <b>Credit</b> - Bot developer\n\n` +
+                            `━━━━━━━━━━━━━━━━━━━━\n` +
                             `${CONFIG.CREDIT}`;
             await editMessage(chatId, messageId, helpText, createButtons(storedData));
             break;
@@ -411,91 +490,5 @@ async function handleCallback(callbackQuery) {
             const creditText = `👤 <b>Bot Developer</b>\n\n` +
                               `🔹 <b>Created by:</b> @Introspection\n` +
                               `🔹 <b>Powered by:</b> HeaNg[Black-Cyber] AI\n` +
-                              `🔹 <b>Version:</b> 1.0\n` +
-                              `🔹 <b>Source:</b> GitHub\n\n` +
-                              `💡 <b>Support:</b>\n` +
-                              `• Report bugs to @Introspection\n` +
-                              `• Feature requests welcome\n\n` +
-                              `━━━━━━━━━━━━━━━━━━━━\n` +
-                              `${CONFIG.CREDIT}`;
-            await editMessage(chatId, messageId, creditText, createButtons(storedData));
-            break;
-            
-        case 'info_insurance':
-            if (storedData) {
-                const insText = `🛡️ <b>INSURANCE DETAILS</b>\n\n` +
-                               `🏢 <b>Company:</b> ${storedData.rc_insurance_comp || 'N/A'}\n` +
-                               `📄 <b>Policy No:</b> ${storedData.rc_insurance_policy_no || 'N/A'}\n` +
-                               `⏳ <b>Valid Upto:</b> ${storedData.rc_insurance_upto || 'N/A'}\n\n` +
-                               `🚗 <b>Vehicle:</b> ${storedData.rc_regn_no || 'N/A'}\n` +
-                               `👤 <b>Owner:</b> ${storedData.rc_owner_name || 'N/A'}\n\n` +
-                               `${CONFIG.CREDIT}`;
-                await editMessage(chatId, messageId, insText, createButtons(storedData));
-            } else {
-                await editMessage(chatId, messageId,
-                    '❌ No vehicle data found. Please search first.',
-                    createButtons()
-                );
-            }
-            break;
-            
-        case 'info_pucc':
-            if (storedData) {
-                const puccText = `🔧 <b>PUCC DETAILS</b>\n\n` +
-                                `📄 <b>PUCC No:</b> ${storedData.rc_pucc_no || 'N/A'}\n` +
-                                `⏳ <b>Valid Upto:</b> ${storedData.rc_pucc_upto || 'N/A'}\n\n` +
-                                `🚗 <b>Vehicle:</b> ${storedData.rc_regn_no || 'N/A'}\n` +
-                                `📋 <b>Status:</b> ${storedData.rc_status || 'N/A'}\n\n` +
-                                `${CONFIG.CREDIT}`;
-                await editMessage(chatId, messageId, puccText, createButtons(storedData));
-            } else {
-                await editMessage(chatId, messageId,
-                    '❌ No vehicle data found. Please search first.',
-                    createButtons()
-                );
-            }
-            break;
-            
-        case 'info_owner':
-            if (storedData) {
-                let ownerText = `👤 <b>OWNER DETAILS</b>\n\n` +
-                               `🔹 <b>Name:</b> ${storedData.rc_owner_name || 'N/A'}\n` +
-                               `📍 <b>Permanent:</b> ${storedData.rc_permanent_address || 'N/A'}\n` +
-                               `📍 <b>Present:</b> ${storedData.rc_present_address || 'N/A'}\n` +
-                               `📋 <b>Category:</b> ${storedData.rc_own_catg_desc || 'N/A'}\n` +
-                               `🔢 <b>Owner Serial:</b> ${storedData.rc_owner_sr || 'N/A'}\n\n`;
-                
-                if (storedData.rc_owner_history && storedData.rc_owner_history.length > 0) {
-                    ownerText += `📜 <b>Owner History:</b>\n`;
-                    storedData.rc_owner_history.forEach((owner, index) => {
-                        ownerText += `   ${index + 1}. ${owner.owner_name} (${owner.state_cd})\n`;
-                    });
-                }
-                
-                ownerText += `\n🚗 <b>Vehicle:</b> ${storedData.rc_regn_no || 'N/A'}\n\n${CONFIG.CREDIT}`;
-                await editMessage(chatId, messageId, ownerText, createButtons(storedData));
-            } else {
-                await editMessage(chatId, messageId,
-                    '❌ No vehicle data found. Please search first.',
-                    createButtons()
-                );
-            }
-            break;
-            
-        default:
-            await answerCallback(callbackId, 'Unknown option');
-            break;
-    }
-}
-
-// ============================================
-// SET WEBHOOK ENDPOINT
-// ============================================
-app.get('/setwebhook', async (req, res) => {
-    try {
-        const webhookUrl = req.query.url || `${req.protocol}://${req.get('host')}${CONFIG.WEBHOOK_PATH}`;
-        const response = await axios.post(`${TELEGRAM_API}/setWebhook`, {
-            url: webhookUrl
-        });
-        res.json({
-            success: response.dat
+                              `🔹 <b>Version:</b> 2.0\n` +
+                              `🔹 <b>API:</b> 
